@@ -1,0 +1,193 @@
+---
+title: "Quantile Regression on SAT & household income"
+author: "Elizabeth-Lynda Nartey"
+format: html
+editor: visual
+---
+
+# Quantile Regression Demonstration — *Elite College Dataset*
+
+### *Elizabeth-Lynda Nartey*
+
+## Introduction
+
+Understanding the relationship between parental income and student SAT outcomes is an important component of analyzing educational inequality. Prior research consistently suggests that students from higher-income households tend to experience academic advantages, including greater access to resources, test preparation, and college-oriented environments. In this project, SAT attendance rates, scaled as a proxy for SAT performance, serve as the dependent variable of interest. Parental household income percentile is used as the primary explanatory variable, representing the socioeconomic conditions that may influence students' academic trajectories.
+
+A traditional ordinary least squares (OLS) regression would estimate only the *average* association between parental income and SAT outcomes. While informative, this approach overlooks potential variation across the performance distribution. It assumes that income affects low-performing and high-performing students in the same way, which may not reflect real differences in opportunity, motivation, or school-level resources.
+
+To address this limitation, the project employs **quantile regression**, which estimates the relationship between income and SAT performance at different points of the distribution rather than relying solely on the mean. Specifically, the analysis focuses on the 10th and 90th percentiles. The 10th percentile model captures how income influences students at the lower end of SAT performance, where structural barriers may dampen the effect of socioeconomic advantages. In contrast, the 90th percentile model reveals how income affects higher-performing students, who may benefit more from additional parental resources and support.
+
+By comparing these quantile-specific effects, this study provides a richer understanding of how socioeconomic factors shape educational outcomes. Instead of assuming uniform impacts, the analysis reveals whether parental income plays a stronger role among higher-achieving students than those at the lower end of the performance spectrum. This distributional insight contributes to a more nuanced interpretation of educational inequality and the mechanisms through which income shapes academic success.
+
+**Dependent variable (Y):**
+
+-   `sat` (SAT attendance rate, scaled as a proxy for SAT scores)
+
+-   This is the outcome we are interested in predicting essentially, **how SAT performance varies**.
+
+**Explanatory variable (X):**
+
+-   `income` (parental household income percentile)
+
+-   This is the predictor — the factor we believe **influences SAT outcomes**.
+
+**Hypothesis:**
+
+> Higher parental household income is associated with higher SAT attendance rates (a proxy for SAT scores).
+>
+> -   At the **lower end of SAT performance** (10th percentile), parental income may have a smaller effect.
+>
+> -   At the **upper end of SAT performance** (90th percentile), parental income may have a stronger effect.
+>
+>     **Explanation:**
+
+-   In a traditional regression (OLS), we estimate the **average effect** of parental income on SAT scores. This gives a single slope showing how SAT scores change with income on average.
+
+-   **Quantile regression** extends this by estimating effects **at different points of the SAT distribution**.
+
+```         
+-    The **10th percentile regression line** shows the effect for lower SAT scores.
+
+-    The **90th percentile regression line** shows the effect for higher SAT scores.
+```
+
+-   This method helps us understand whether parental income affects SAT outcomes **uniformly across the distribution**, or whether its impact is stronger for high-performing students compared to low-performing students.
+
+```{r}
+library(tidyverse)   
+library(quantreg)   
+library(broom)      
+
+```
+
+## Dataset
+
+The dataset was sourced from kaggle, [click here](https://www.kaggle.com/datasets/mexwell/elite-college-admissions "Dataset Location"). ( <https://www.kaggle.com/datasets/mexwell/elite-college-admissions> )
+
+```{r}
+# Load dataset
+data <- read.csv("C:/Users/auuser/OneDrive/STAT615/GROUP PROJECT FINAL/CollegeAdmissions_Data.csv")
+
+# View structure and first few rows
+glimpse(data)
+head(data)
+
+```
+
+## Data Cleaning
+
+```{r}
+data_clean <- data %>%
+  select(
+    name,
+    par_income_bin,       # parental income percentile
+    attend_sat,           # SAT performance proxy
+    tier,                 # tier of the institution
+    public                # public/private status
+  ) %>%
+  rename(
+    school = name,
+    income = par_income_bin,
+    sat = attend_sat
+  ) %>%
+  drop_na(income, sat, tier, public)   
+
+# Inspect the cleaned dataset
+glimpse(data_clean)
+head(data_clean)
+
+```
+
+```{r}
+ggplot(data_clean, aes(x = income, y = sat)) +
+  geom_jitter(width = 1, height = 0.00005, alpha = 0.5, color = "steelblue") + 
+  geom_boxplot(alpha = 0.2, outlier.shape = NA) +
+  labs(
+    title = "Exploratory: SAT Attendance Rate vs Parental Income Percentile",
+    x = "Parental Household Income Percentile",
+    y = "SAT Attendance Rate (scaled / proxy)"
+  ) +
+  theme_minimal()
+
+
+
+```
+
+```{r}
+library(quantreg)
+
+# 10th percentile
+model_10 <- rq(sat ~ income, tau = 0.10, data = data_clean)
+summary(model_10)
+
+# 90th percentile
+model_90 <- rq(sat ~ income, tau = 0.90, data = data_clean)
+summary(model_90)
+
+
+```
+
+### Summary/Conclusion: Effect of Parental Income on SAT Scores
+
+The dependent variable is SAT attendance rate (`sat`), and the explanatory variable is parental income percentile (`income`). The null hypothesis (H₀) states that parental income has no effect on SAT attendance at a given quantile (βincome,τ=0\beta*{*\text{income},\tau} = 0βincome,τ​=0), while the alternative hypothesis (H₁) states that parental income does have an effect (βincome,τ≠0\beta{\text{income},\tau} \neq 0βincome,τ​=0).
+
+At the 10th percentile of SAT performance, the slope of income is 0.00001 with a p-value \< 0.05, indicating a small but statistically significant positive effect of parental income on SAT attendance. At the 90th percentile, the slope increases to 0.00005, also statistically significant, showing that parental income has a stronger effect on high-performing students.
+
+These results illustrate that the impact of parental income is not uniform across the SAT distribution. While OLS regression would only capture the average effect, quantile regression reveals that income matters more for higher SAT performers, aligning with the hypothesis that higher-income families provide advantages that boost top-end SAT outcomes. Overall, the null hypothesis is rejected at both the 10th and 90th percentiles, confirming that parental income significantly affects SAT attendance rate and that the effect increases at higher quantiles.
+
+```{r}
+# Create a tidy table of coefficients
+coefs <- bind_rows(
+  broom::tidy(model_10) %>% mutate(Quantile = "10th Percentile"),
+  broom::tidy(model_90) %>% mutate(Quantile = "90th Percentile")
+  
+  #broom::tidy(model_ols) %>% mutate(Quantile = "OLS (Mean)")
+)
+
+# Show results
+coefs
+
+```
+
+```{r}
+ggplot(data_clean, aes(x = income, y = sat)) +
+  geom_point(alpha = 0.6, color = "gray50") +
+  geom_smooth(method = "lm", se = FALSE, color = "blue", linewidth = 1) +
+  geom_quantile(quantiles = 0.10, color = "red", linewidth = 1) +
+  geom_quantile(quantiles = 0.90, color = "green", linewidth = 1) +
+  labs(
+    title = "Quantile Regression: SAT Attendance Rate by Parental Income Percentile",
+    x = "Parental Household Income Percentile",
+    y = "SAT Attendance Rate (scaled / proxy)",
+    caption = "Red = 10th percentile | Green = 90th percentile | Blue = OLS"
+  ) +
+  theme_minimal()
+
+
+```
+
+# **References**
+
+**Buchinsky, M.** (1998). Recent advances in quantile regression models: A practical guideline for empirical research. *The Journal of Human Resources, 33*(1), 88–126. <https://doi.org/10.2307/146316>
+
+**CodeEmporium.** (2021, March 18). *Quantile regression – explained!* \[Video\]. YouTube. <https://www.youtube.com/watch?v=JvIzB3hULCo>
+
+**Haveman, R., & Wolfe, B.** (1995). The determinants of children's attainments: A review of methods and findings. *Journal of Economic Literature, 33*(4), 1829–1878.
+
+**Kaggle.** (n.d.). *Elite College Admissions dataset*. Kaggle. <https://www.kaggle.com/datasets/mexwell/elite-college-admissions>
+
+**Koenker, R.** (2024). *quantreg: Quantile Regression* (R package). <https://CRAN.R-project.org/package=quantreg>
+
+**Koenker, R., & Bassett, G.** (1978). Regression quantiles. *Econometrica, 46*(1), 33–50. <https://doi.org/10.2307/1913643>
+
+**Kuhn, M., & Wickham, H.** (2020). *broom: Convert statistical analysis objects into tidy tibbles* (R package). <https://CRAN.R-project.org/package=broom>
+
+**Kutner, M. H., Nachtsheim, C. J., & Neter, J.** (2004). *Applied linear regression models* (4th ed.). McGraw-Hill Irwin.
+
+**MeerkatStatistics.** (2023, November 6). *Linear vs. quantile regression* \[Video\]. YouTube. <https://www.youtube.com/watch?v=ZW-zmA9_Pz0>
+
+**Reardon, S. F.** (2011). The widening academic achievement gap between the rich and the poor: New evidence and possible explanations. In G. Duncan & R. Murnane (Eds.), *Whither opportunity? Rising inequality and the uncertain life chances of low-income children* (pp. 91–116). Russell Sage Foundation.
+
+**Wickham, H.** (2016). *ggplot2: Elegant graphics for data analysis*. Springer. <https://ggplot2.tidyverse.org>
+
+**Wickham, H., Averick, M., Bryan, J., Chang, W., D'Agostino McGowan, L., François, R., … & Yutani, H.** (2019). Welcome to the tidyverse. *Journal of Open Source Software, 4*(43), 1686. <https://doi.org/10.21105/joss.01686>​
